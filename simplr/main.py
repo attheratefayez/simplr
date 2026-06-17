@@ -5,9 +5,16 @@ import os
 import stat
 import sys
 
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.text import Text
+
 from . import config as cfg
 from .parser import find_first_error
 from .providers import create_provider
+
+console = Console()
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,11 +38,11 @@ def main() -> None:
     args = parse_args()
 
     if not stdin_is_piped():
-        print(
+        console.print(
             "No input detected. Pipe a CMake build log:\n"
             "  cmake --build build 2>&1 | simplr\n"
             "  simplr < build.log",
-            file=sys.stderr,
+            style="dim",
         )
         sys.exit(1)
 
@@ -43,7 +50,7 @@ def main() -> None:
 
     error = find_first_error(log)
     if error is None:
-        print("No build errors detected.")
+        console.print("No build errors detected.", style="dim")
         return
 
     config = cfg.load()
@@ -59,14 +66,22 @@ def main() -> None:
     try:
         explanation = provider.explain_error(error, config["inference"])
     except Exception as e:
-        print(f"Error during analysis: {e}", file=sys.stderr)
+        console.print(f"[red]Error during analysis:[/red] {e}")
         sys.exit(1)
 
-    header = f"Error: {error.error_type}"
+    header = Text()
+    header.append("Error", style="bold yellow")
+    header.append(f" ({error.error_type})", style="bold")
     if error.file:
-        header += f" in {error.file}"
+        header.append(f" in {error.file}", style="bold")
     if error.line_num:
-        header += f":{error.line_num}"
-    print(header)
-    print()
-    print(explanation)
+        header.append(f":{error.line_num}", style="bold")
+
+    panel = Panel(
+        Markdown(explanation),
+        title=header,
+        title_align="left",
+        border_style="yellow",
+        padding=(1, 2),
+    )
+    console.print(panel)
