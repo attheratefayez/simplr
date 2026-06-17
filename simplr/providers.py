@@ -7,13 +7,18 @@ from typing import Any
 
 import httpx
 
-from .parser import ErrorInfo
+from .parser import ErrorInfo, IndependentError
 from .prompt import build_messages
 
 
 class Provider(ABC):
     @abstractmethod
-    def explain_error(self, error: ErrorInfo, infer_cfg: dict[str, Any]) -> str:
+    def explain_error(
+        self,
+        error: ErrorInfo,
+        infer_cfg: dict[str, Any],
+        independent_errors: list[IndependentError] | None = None,
+    ) -> str:
         ...
 
 
@@ -35,11 +40,14 @@ class OllamaProvider(Provider):
             sys.exit(1)
 
     def explain_error(
-        self, error: ErrorInfo, infer_cfg: dict[str, Any]
+        self,
+        error: ErrorInfo,
+        infer_cfg: dict[str, Any],
+        independent_errors: list[IndependentError] | None = None,
     ) -> str:
         self._check_connection()
 
-        messages = build_messages(error)
+        messages = build_messages(error, independent_errors)
         payload = {
             "model": self.model,
             "messages": messages,
@@ -61,12 +69,15 @@ class HuggingFaceAPIProvider(Provider):
         self.token = os.environ.get("HF_TOKEN")
 
     def explain_error(
-        self, error: ErrorInfo, infer_cfg: dict[str, Any]
+        self,
+        error: ErrorInfo,
+        infer_cfg: dict[str, Any],
+        independent_errors: list[IndependentError] | None = None,
     ) -> str:
         from huggingface_hub import InferenceClient
 
         client = InferenceClient(token=self.token)
-        messages = build_messages(error)
+        messages = build_messages(error, independent_errors)
 
         result = client.chat_completion(
             model=self.model,
@@ -157,11 +168,14 @@ class HuggingFaceProvider(Provider):
         sys.stderr.flush()
 
     def explain_error(
-        self, error: ErrorInfo, infer_cfg: dict[str, Any]
+        self,
+        error: ErrorInfo,
+        infer_cfg: dict[str, Any],
+        independent_errors: list[IndependentError] | None = None,
     ) -> str:
         self._load()
 
-        messages = build_messages(error)
+        messages = build_messages(error, independent_errors)
         prompt = self._tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
