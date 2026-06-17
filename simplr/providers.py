@@ -5,10 +5,13 @@ import sys
 from abc import ABC, abstractmethod
 from typing import Any
 
+from dotenv import load_dotenv
 import httpx
 
+load_dotenv()
+
 from .parser import ErrorInfo, IndependentError
-from .prompt import build_messages
+from .prompt import build_messages, build_warning_messages
 
 
 class Provider(ABC):
@@ -20,6 +23,13 @@ class Provider(ABC):
         independent_errors: list[IndependentError] | None = None,
     ) -> str:
         ...
+
+    def explain_warning(
+        self,
+        warning: IndependentError,
+        infer_cfg: dict[str, Any],
+    ) -> str:
+        raise NotImplementedError("explain_warning not implemented by this provider")
 
 
 class OllamaProvider(Provider):
@@ -62,6 +72,26 @@ class OllamaProvider(Provider):
         r.raise_for_status()
         return r.json()["message"]["content"].strip()
 
+    def explain_warning(
+        self,
+        warning: IndependentError,
+        infer_cfg: dict[str, Any],
+    ) -> str:
+        self._check_connection()
+        messages = build_warning_messages(warning)
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "options": {
+                "temperature": infer_cfg["temperature"],
+                "num_predict": infer_cfg["max_new_tokens"],
+            },
+            "stream": False,
+        }
+        r = httpx.post(f"{self.host}/api/chat", json=payload, timeout=120)
+        r.raise_for_status()
+        return r.json()["message"]["content"].strip()
+
 
 class HuggingFaceAPIProvider(Provider):
     def __init__(self, config: dict[str, Any]) -> None:
@@ -86,6 +116,22 @@ class HuggingFaceAPIProvider(Provider):
             temperature=infer_cfg["temperature"],
         )
 
+        return result.choices[0].message.content.strip()
+
+    def explain_warning(
+        self,
+        warning: IndependentError,
+        infer_cfg: dict[str, Any],
+    ) -> str:
+        from huggingface_hub import InferenceClient
+        messages = build_warning_messages(warning)
+        client = InferenceClient(token=self.token)
+        result = client.chat_completion(
+            model=self.model,
+            messages=messages,
+            max_tokens=infer_cfg["max_new_tokens"],
+            temperature=infer_cfg["temperature"],
+        )
         return result.choices[0].message.content.strip()
 
 
@@ -192,6 +238,33 @@ class HuggingFaceProvider(Provider):
             pad_token_id=self._tokenizer.eos_token_id,
         )
 
+        response = self._tokenizer.decode(
+            outputs[0][inputs.input_ids.shape[1] :],
+            skip_special_tokens=True,
+        )
+        return response.strip()
+
+    def explain_warning(
+        self,
+        warning: IndependentError,
+        infer_cfg: dict[str, Any],
+    ) -> str:
+        self._load()
+        messages = build_warning_messages(warning)
+        prompt = self._tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True,
+        )
+        inputs = self._tokenizer(prompt, return_tensors="pt").to(
+            self._model.device
+        )
+        outputs = self._model.generate(
+            **inputs,
+            max_new_tokens=infer_cfg["max_new_tokens"],
+            temperature=infer_cfg["temperature"],
+            top_p=0.95,
+            do_sample=True,
+            pad_token_id=self._tokenizer.eos_token_id,
+        )
         response = self._tokenizer.decode(
             outputs[0][inputs.input_ids.shape[1] :],
             skip_special_tokens=True,

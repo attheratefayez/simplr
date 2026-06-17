@@ -27,6 +27,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_new_tokens": 512,
         "temperature": 0.1,
     },
+    "cache": {
+        "ttl_days": 30,
+    },
+    "build": {
+        "command": "",
+    },
 }
 
 
@@ -81,5 +87,13 @@ model = "{DEFAULT_CONFIG['huggingface-api']['model']}"
 [inference]
 max_new_tokens = {DEFAULT_CONFIG['inference']['max_new_tokens']}
 temperature = {DEFAULT_CONFIG['inference']['temperature']}
+
+# Build command for `simplr build` and `--watch`
+[build]
+command = "{DEFAULT_CONFIG['build']['command']}"
+
+# LLM response cache
+[cache]
+ttl_days = {DEFAULT_CONFIG['cache']['ttl_days']}
 """
         )

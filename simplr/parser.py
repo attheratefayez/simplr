@@ -6,6 +6,8 @@ from typing import NamedTuple
 CONTEXT_BEFORE = 5
 MAX_CONTEXT_AFTER = 6
 
+_SYSTEM_HEADER_PREFIXES = ("/usr/", "/usr/local/")
+
 
 class ErrorInfo(NamedTuple):
     error_type: str
@@ -22,6 +24,11 @@ class IndependentError(NamedTuple):
     error_type: str
 
 
+WARNING_PATTERNS: list[tuple[str, str]] = [
+    (r'^(.+?):(\d+):(\d+):\s+warning:\s*(.*)', "compiler"),
+    (r'^(.+?):(\d+):\s+warning:\s*(.*)', "compiler_nocol"),
+]
+
 PATTERNS: list[tuple[str, str]] = [
     (r'^CMake Error at (.+?):(\d+)(?: \((.*?)\))?:\s*(.*)', "cmake"),
     (r'^(.+?):(\d+):(\d+):\s+(?:fatal\s+)?error:\s*(.*)', "compiler"),
@@ -29,7 +36,10 @@ PATTERNS: list[tuple[str, str]] = [
     (r'(undefined reference to|undefined symbol|unresolved external symbol)',
      "linker"),
     (r'^fatal error:\s*(.*)', "fatal"),
-    (r'^(collect2|ld):\s+fatal:\s*(.*)', "linker"),
+    (r'^(collect2|ld):\s+.*:\s*(error|fatal):\s*(.*)', "linker"),
+    (r'^(collect2|ld):\s+fatal\s+error:\s*(.*)', "linker"),
+    (r'^(.+?):\(\.text\+0x[0-9a-f]+\):\s+(undefined reference to|relocation against)\s*(.*)',
+     "linker_detail"),
 ]
 
 
@@ -54,6 +64,12 @@ def _extract_info(
         return match.group(1), int(match.group(2)), match.group(3).strip()
     if error_type == "fatal":
         return None, None, match.group(1).strip()
+    if error_type == "linker_detail":
+        symbol = match.group(3).strip() if match.group(3) else ""
+        msg = match.group(2)
+        if symbol:
+            msg += " " + symbol
+        return match.group(1), None, msg
     return None, None, stripped
 
 
@@ -66,6 +82,11 @@ def find_first_error(log: str) -> ErrorInfo | None:
             continue
         match, error_type = r
 
+        file, line_num, msg = _extract_info(match, error_type, line)
+
+        if file is not None and file.startswith(_SYSTEM_HEADER_PREFIXES):
+            continue
+
         start = max(0, i - CONTEXT_BEFORE)
 
         end = min(len(lines), i + MAX_CONTEXT_AFTER + 1)
@@ -75,7 +96,6 @@ def find_first_error(log: str) -> ErrorInfo | None:
                 break
 
         context = "\n".join(lines[start:end])
-        file, line_num, msg = _extract_info(match, error_type, line)
 
         return ErrorInfo(
             error_type=error_type,
@@ -120,20 +140,51 @@ def find_independent_errors(
         match, et = r
         f, ln, msg = _extract_info(match, et, lines[i])
 
-        independent = False
-        if et != first.error_type:
-            independent = True
-        elif f is not None and f != first.file:
-            independent = True
+        if f is not None and f.startswith(_SYSTEM_HEADER_PREFIXES):
+            continue
 
-        if independent:
-            results.append(
-                IndependentError(
-                    file=f,
-                    line_num=ln,
-                    message=msg,
-                    error_type=et,
-                )
+        results.append(
+            IndependentError(
+                file=f,
+                line_num=ln,
+                message=msg,
+                error_type=et,
             )
+        )
+
+    return results
+
+
+def _match_warning_line(line: str) -> tuple[re.Match, str] | None:
+    stripped = line.strip()
+    for pattern, error_type in WARNING_PATTERNS:
+        match = re.search(pattern, stripped, re.IGNORECASE)
+        if match:
+            return match, error_type
+    return None
+
+
+def find_warnings(log: str) -> list[IndependentError]:
+    lines = log.splitlines()
+    results: list[IndependentError] = []
+
+    for line in lines:
+        r = _match_warning_line(line)
+        if r is None:
+            continue
+        match, wt = r
+        f, ln, msg = _extract_info(match, wt, line)
+
+        if f is not None and f.startswith(_SYSTEM_HEADER_PREFIXES):
+            continue
+
+        results.append(
+            IndependentError(
+                file=f,
+                line_num=ln,
+                message=msg,
+                error_type=wt,
+            )
+        )
 
     return results
