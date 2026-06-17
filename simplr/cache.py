@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import time
-from pathlib import Path
 
+from .db import get_db
 from .parser import ErrorInfo
-
-CACHE_DIR = Path.home() / ".config" / "simplr"
-CACHE_PATH = CACHE_DIR / "cache.json"
 
 
 def _make_key(error: ErrorInfo) -> str:
@@ -16,39 +12,32 @@ def _make_key(error: ErrorInfo) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _load_cache() -> dict[str, dict]:
-    if not CACHE_PATH.exists():
-        return {}
-    try:
-        return json.loads(CACHE_PATH.read_text())
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def _save_cache(cache: dict[str, dict]) -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(cache, indent=2))
-
-
 def get_cached(error: ErrorInfo, ttl_days: int = 30) -> str | None:
-    cache = _load_cache()
+    conn = get_db()
     key = _make_key(error)
-    entry = cache.get(key)
-    if entry is None:
+    row = conn.execute(
+        "SELECT response, timestamp FROM cache WHERE hash = ?", (key,)
+    ).fetchone()
+    if row is None:
+        conn.close()
         return None
-    age_seconds = time.time() - entry.get("timestamp", 0)
+    response, timestamp = row
+    age_seconds = time.time() - timestamp
     if age_seconds > ttl_days * 86400:
-        del cache[key]
-        _save_cache(cache)
+        conn.execute("DELETE FROM cache WHERE hash = ?", (key,))
+        conn.commit()
+        conn.close()
         return None
-    return entry.get("response")
+    conn.close()
+    return response
 
 
 def set_cached(error: ErrorInfo, response: str) -> None:
-    cache = _load_cache()
+    conn = get_db()
     key = _make_key(error)
-    cache[key] = {
-        "response": response,
-        "timestamp": time.time(),
-    }
-    _save_cache(cache)
+    conn.execute(
+        "INSERT OR REPLACE INTO cache (hash, response, timestamp) VALUES (?, ?, ?)",
+        (key, response, time.time()),
+    )
+    conn.commit()
+    conn.close()
