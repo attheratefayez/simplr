@@ -13,3 +13,6 @@ wheels/
 # Environment files
 .env
 .env.*
+
+# Build artifacts / test files
+main.cpp
