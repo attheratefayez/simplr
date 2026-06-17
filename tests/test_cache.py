@@ -1,5 +1,3 @@
-import time
-
 from simplr.cache import get_cached, set_cached
 from simplr.parser import ErrorInfo
 

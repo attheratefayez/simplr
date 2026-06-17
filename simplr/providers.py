@@ -138,7 +138,6 @@ class HuggingFaceAPIProvider(Provider):
 class HuggingFaceProvider(Provider):
     def __init__(self, config: dict[str, Any]) -> None:
         self.model_cfg = config["huggingface"]
-        self.infer_cfg = config["inference"]
         self._model = None
         self._tokenizer = None
 

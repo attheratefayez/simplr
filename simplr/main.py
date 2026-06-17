@@ -117,6 +117,7 @@ def run_analysis(
 
     other_errors = find_independent_errors(log, error)
 
+    provider = None
     explanation: str | None = None
 
     if not no_cache:
@@ -170,7 +171,10 @@ def run_analysis(
         _show_warnings(log, config, provider)
 
 
-def _show_warnings(log: str, config: dict, provider) -> None:
+def _show_warnings(log: str, config: dict, provider=None) -> None:
+    if provider is None:
+        provider = create_provider(config)
+
     warnings = find_warnings(log)
     if not warnings:
         return
@@ -230,11 +234,8 @@ def cmd_build(args: argparse.Namespace, config: dict) -> None:
 
     if args.build_dir:
         cmd = f"cmake --build {shlex.quote(args.build_dir)}"
-    elif base_command:
-        cmd = base_command
     else:
-        console.print("[red]No build directory specified.[/red]")
-        sys.exit(1)
+        cmd = base_command
 
     if extra:
         cmd += " " + " ".join(shlex.quote(a) for a in extra)
@@ -378,6 +379,8 @@ def main() -> None:
     args = parse_args()
     config = resolve_config(args)
 
+    cfg.ensure_default_config()
+
     if args.command == "stats":
         cmd_stats()
         return
@@ -409,7 +412,6 @@ def main() -> None:
     sys.stdout.flush()
 
     if args.watch:
-        cfg.ensure_default_config()
         build_cfg = config.get("build", {})
         base_command = build_cfg.get("command", "").strip()
         if not base_command:

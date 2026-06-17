@@ -58,6 +58,23 @@ collect2: error: ld returned 1 exit status
     assert err.error_type in ("linker_detail", "linker")
 
 
+def test_first_error_linker_collect2():
+    log = """collect2: error: ld returned 1 exit status
+"""
+    err = find_first_error(log)
+    assert err is not None
+    assert err.error_type == "linker"
+    assert "ld returned" in err.message
+
+
+def test_first_error_linker_fatal():
+    log = """collect2: fatal error: some error
+"""
+    err = find_first_error(log)
+    assert err is not None
+    assert err.error_type == "linker"
+
+
 def test_no_error():
     log = """Compilation succeeded.
 """

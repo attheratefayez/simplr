@@ -33,13 +33,12 @@ PATTERNS: list[tuple[str, str]] = [
     (r'^CMake Error at (.+?):(\d+)(?: \((.*?)\))?:\s*(.*)', "cmake"),
     (r'^(.+?):(\d+):(\d+):\s+(?:fatal\s+)?error:\s*(.*)', "compiler"),
     (r'^(.+?):(\d+):\s+(?:fatal\s+)?error:\s*(.*)', "compiler_nocol"),
-    (r'(undefined reference to|undefined symbol|unresolved external symbol)',
-     "linker"),
     (r'^fatal error:\s*(.*)', "fatal"),
-    (r'^(collect2|ld):\s+.*:\s*(error|fatal):\s*(.*)', "linker"),
-    (r'^(collect2|ld):\s+fatal\s+error:\s*(.*)', "linker"),
     (r'^(.+?):\(\.text\+0x[0-9a-f]+\):\s+(undefined reference to|relocation against)\s*(.*)',
      "linker_detail"),
+    (r'(undefined reference to|undefined symbol|unresolved external symbol)',
+     "linker"),
+    (r'^(collect2|ld):\s+(?:fatal\s+)?(?:error|fatal):\s*(.*)', "linker"),
 ]
 
 
@@ -70,6 +69,8 @@ def _extract_info(
         if symbol:
             msg += " " + symbol
         return match.group(1), None, msg
+    if error_type == "linker":
+        return match.group(1), None, match.group(2).strip()
     return None, None, stripped
 
 
