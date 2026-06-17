@@ -55,10 +55,10 @@ def main() -> None:
     error = find_first_error(log)
     if error is None:
         console.print()
-        console.print("No build errors detected.", style="bold green")
+        console.print("  ✔  No errors detected.", style="bold green")
         return
 
-    console.print("\n[yellow]simplifying...[/yellow]", style="bold")
+    console.print("\n  Analyzing...", style="bold")
 
     config = cfg.load()
 
