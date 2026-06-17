@@ -1,0 +1,25 @@
+[project]
+name = "simplr"
+version = "0.1.0"
+description = "CMake build log error explainer using local LLMs"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.0",
+    "huggingface-hub>=0.19.0",
+]
+
+[project.optional-dependencies]
+local = [
+    "torch>=2.1.0",
+    "transformers>=4.38.0",
+    "accelerate>=0.28.0",
+]
+gpu = ["bitsandbytes>=0.43.0"]
+
+[project.scripts]
+simplr = "simplr.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
