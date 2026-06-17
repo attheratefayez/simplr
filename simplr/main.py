@@ -48,10 +48,17 @@ def main() -> None:
 
     log = sys.stdin.read()
 
+    sys.stdout.write(log)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
     error = find_first_error(log)
     if error is None:
-        console.print("No build errors detected.", style="dim")
+        console.print()
+        console.print("No build errors detected.", style="bold green")
         return
+
+    console.print("\n[yellow]simplifying...[/yellow]", style="bold")
 
     config = cfg.load()
 
